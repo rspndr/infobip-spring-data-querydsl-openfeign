@@ -1,0 +1,85 @@
+# Publishes the rspndr openfeign-flavored infobip-spring-data artifacts to the
+# private maven repo (S3) whenever a version tag is pushed.
+#
+# Release procedure:
+#   1. commit changes on the release branch
+#   2. ensure all pom versions == the tag you are about to create
+#      (mvn versions:set -DnewVersion=<x.y.z.n-openfeign> -DgenerateBackupPoms=false)
+#   3. git tag -a <x.y.z.n-openfeign> -m "..." && git push origin <tag>
+#
+# Only the JDBC line is built and published (common, annotation processors,
+# jdbc-querydsl, boot starter). The jpa/r2dbc modules are excluded: rspndr does
+# not consume them and they carry unresolved openfeign 7.x API drift.
+#
+# Auth: assumes an AWS IAM role via GitHub OIDC. Configure the repo/org secret
+# AWS_MAVEN_PUBLISH_ROLE_ARN with a role trusted for this repository that
+# allows s3:PutObject/ListBucket on rspndr-maven-repo/releases/com/infobip/*.
+# (Alternative: static keys — swap the configure-aws-credentials inputs for
+# aws-access-key-id/aws-secret-access-key secrets.)
+
+name: Publish to rspndr maven repo (S3)
+
+on:
+  push:
+    tags:
+      - '*-openfeign'
+
+env:
+  JDBC_MODULES: >-
+    infobip-spring-data-common,
+    infobip-spring-data-jdbc-annotation-processor-common,
+    infobip-spring-data-jdbc-annotation-processor,
+    infobip-spring-data-jdbc-querydsl,
+    infobip-spring-data-jdbc-querydsl-boot-starter
+  S3_DEST: s3://rspndr-maven-repo/releases/com/infobip/
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify tag matches project version
+        run: |
+          POM_VERSION=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "pom=$POM_VERSION tag=$GITHUB_REF_NAME"
+          if [ "$POM_VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match pom version '$POM_VERSION'. Run versions:set before tagging."
+            exit 1
+          fi
+
+      - name: Build JDBC modules (test-compile runs the annotation processor — codegen gate)
+        run: |
+          MODULES=$(echo "$JDBC_MODULES" | tr -d ' \n')
+          mvn -B -DskipTests -Dgpg.skip=true install -pl "$MODULES" -am
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_MAVEN_PUBLISH_ROLE_ARN }}
+          aws-region: ca-central-1
+
+      - name: Refuse to overwrite a published version
+        run: |
+          EXISTING=$(aws s3 ls "${S3_DEST}infobip-spring-data-jdbc-querydsl/${GITHUB_REF_NAME}/" 2>/dev/null | wc -l)
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "::error::Version $GITHUB_REF_NAME already exists in the maven repo. Published versions are immutable — bump the version instead."
+            exit 1
+          fi
+
+      - name: Publish to S3
+        run: |
+          aws s3 cp --recursive ~/.m2/repository/com/infobip/ "$S3_DEST" \
+            --exclude "*" --include "*${GITHUB_REF_NAME}*"
+          echo "Published artifacts:"
+          aws s3 ls --recursive "$S3_DEST" | grep "$GITHUB_REF_NAME"
