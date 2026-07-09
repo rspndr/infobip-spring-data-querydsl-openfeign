@@ -12,6 +12,7 @@ This forked repository is based upon OpenFeign's implementation of Query DSL, si
 
 ## Repository Reference
 [OpenFeign/querydsl](https://github.com/openfeign/querydsl)
+
 [QueryDsl/querdsl](https://github.com/querydsl/querydsl)
 
 ## Contents
