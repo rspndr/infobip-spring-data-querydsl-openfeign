@@ -10,7 +10,7 @@ Infobip Spring Data Querydsl provides new functionality that enables the user to
 ## RSPNDR Fork
 This forked repository is based upon OpenFeign's implementation of Query DSL, since the original Query DSL repository has seemingly abandoned maintenance. 
 
-## Repository Reference
+### Repository Reference
 [OpenFeign/querydsl](https://github.com/openfeign/querydsl)
 
 [QueryDsl/querdsl](https://github.com/querydsl/querydsl)
