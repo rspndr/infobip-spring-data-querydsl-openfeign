@@ -1,4 +1,4 @@
-# Infobip Spring Data Querydsl
+# Infobip Spring Data Querydsl - RSPNDR OpenFeign Fork
 
 [![](https://github.com/infobip/infobip-spring-data-querydsl/workflows/maven/badge.svg)](https://github.com/infobip/infobip-spring-data-querydsl/actions?query=workflow%3Amaven)
 [![Maven Central](https://maven-badges.sml.io/sonatype-central/com.infobip/infobip-spring-data-querydsl/badge.svg)](https://maven-badges.sml.io/sonatype-central/com.infobip/infobip-spring-data-querydsl)
@@ -6,6 +6,13 @@
 [![Known Vulnerabilities](https://snyk.io/test/github/infobip/infobip-spring-data-querydsl/badge.svg)](https://snyk.io/test/github/infobip/infobip-spring-data-querydsl)
 
 Infobip Spring Data Querydsl provides new functionality that enables the user to leverage the full power of Querydsl API on top of Spring Data repository infrastructure.
+
+## RSPNDR Fork
+This forked repository is based upon OpenFeign's implementation of Query DSL, since the original Query DSL repository has seemingly abandoned maintenance. 
+
+## Repository Reference
+[OpenFeign/querydsl](https://github.com/openfeign/querydsl)
+[QueryDsl/querdsl](https://github.com/querydsl/querydsl)
 
 ## Contents
 
