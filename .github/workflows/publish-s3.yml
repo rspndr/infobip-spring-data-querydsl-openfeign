@@ -71,8 +71,15 @@ jobs:
 
       - name: Refuse to overwrite a published version
         run: |
-          EXISTING=$(aws s3 ls "${S3_DEST}infobip-spring-data-jdbc-querydsl/${GITHUB_REF_NAME}/" 2>/dev/null | wc -l)
-          if [ "$EXISTING" -gt 0 ]; then
+          # s3api returns exit 0 with an empty result for a non-existent
+          # prefix, and a non-zero exit on access errors — unlike `aws s3 ls`,
+          # which this guard previously used and which silently passed when
+          # ListBucket was denied.
+          EXISTING=$(aws s3api list-objects-v2 \
+            --bucket rspndr-maven-repo \
+            --prefix "releases/com/infobip/infobip-spring-data-jdbc-querydsl/${GITHUB_REF_NAME}/" \
+            --max-items 1 --query 'KeyCount' --output text)
+          if [ "$EXISTING" != "0" ]; then
             echo "::error::Version $GITHUB_REF_NAME already exists in the maven repo. Published versions are immutable — bump the version instead."
             exit 1
           fi
