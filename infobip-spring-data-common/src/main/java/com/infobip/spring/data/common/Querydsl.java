@@ -20,8 +20,10 @@ import com.querydsl.core.types.Expression;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.OrderSpecifier.NullHandling;
 import com.querydsl.core.types.dsl.Expressions;
+import com.querydsl.sql.RelationalPath;
 import com.querydsl.sql.SQLQuery;
 import com.querydsl.sql.SQLQueryFactory;
+import java.util.Arrays;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Order;
@@ -51,7 +53,13 @@ public class Querydsl {
 
 		Assert.notNull(paths, "Paths must not be null!");
 
-		return createQuery().from(paths);
+		// rspndr fork: openfeign querydsl 7.x removed from(Expression...);
+		// all entity paths in the SQL/JDBC stack are generated
+		// RelationalPathBase Q-classes, so narrowing to from(RelationalPath...)
+		// is safe
+		return createQuery().from(Arrays.stream(paths)
+			.map(RelationalPath.class::cast)
+			.toArray(RelationalPath[]::new));
 	}
 
 	public <T> SQLQuery<T> applyPagination(Pageable pageable, SQLQuery<T> query) {
