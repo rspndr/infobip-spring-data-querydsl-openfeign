@@ -17,6 +17,16 @@
     </properties>
 
     <dependencies>
+        <!-- rspndr fork: openfeign querydsl 7.x codegen injection reads
+             jakarta.inject annotations (verified: the injector ignores
+             javax.inject @Inject and falls back to a no-arg constructor,
+             which does not exist) — CustomMetaDataSerializer's imports were
+             switched to jakarta.inject accordingly -->
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <version>2.0.1</version>
+        </dependency>
         <dependency>
             <groupId>com.google.auto.service</groupId>
             <artifactId>auto-service</artifactId>
