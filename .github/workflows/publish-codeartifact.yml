@@ -1,0 +1,115 @@
+name: Publish to rspndr-releases in CodeArtifact
+
+on:
+  push:
+    tags:
+      - '*-openfeign'
+  workflow_dispatch:
+
+env:
+  JDBC_MODULES: >-
+    infobip-spring-data-common,
+    infobip-spring-data-jdbc-annotation-processor-common,
+    infobip-spring-data-jdbc-annotation-processor,
+    infobip-spring-data-jdbc-querydsl,
+    infobip-spring-data-jdbc-querydsl-boot-starter
+  CA_DOMAIN: rspndr
+  CA_ACCOUNT: "775810629154"
+  CA_REGION: us-east-1
+  CA_REPO: rspndr-releases
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Resolve version (tag must match pom on tag builds)
+        id: ver
+        run: |
+          POM_VERSION=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout)
+          echo "pom=$POM_VERSION ref=$GITHUB_REF_NAME ($GITHUB_REF_TYPE)"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$POM_VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match pom version '$POM_VERSION'. Run versions:set before tagging."
+            exit 1
+          fi
+          echo "version=$POM_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6.2.1
+        with:
+          role-to-assume: ${{ secrets.AWS_MAVEN_PUBLISH_ROLE_ARN }}
+          aws-region: ca-central-1
+
+      - name: Get CodeArtifact token
+        run: |
+          TOKEN=$(aws codeartifact get-authorization-token \
+            --domain "$CA_DOMAIN" --domain-owner "$CA_ACCOUNT" --region "$CA_REGION" \
+            --query authorizationToken --output text)
+          echo "::add-mask::$TOKEN"
+          echo "CODEARTIFACT_AUTH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Refuse to overwrite a published version
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if aws codeartifact describe-package-version \
+               --domain "$CA_DOMAIN" --domain-owner "$CA_ACCOUNT" --region "$CA_REGION" \
+               --repository "$CA_REPO" --format maven --namespace com.infobip \
+               --package infobip-spring-data-jdbc-querydsl \
+               --package-version "$VERSION" > /dev/null 2>&1; then
+            echo "::error::Version $VERSION already exists in $CA_REPO. Published versions are immutable — bump the version instead."
+            exit 1
+          fi
+
+      - name: Write Maven settings (CodeArtifact credentials)
+        run: |
+          cat > "$RUNNER_TEMP/ca-settings.xml" <<'EOF'
+          <settings>
+            <servers>
+              <server>
+                <id>rspndr-codeartifact</id>
+                <username>aws</username>
+                <password>${env.CODEARTIFACT_AUTH_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+      # `deploy -am` also deploys the parent pom and any upstream reactor
+      # modules the listed ones need — consumers require the parent pom to
+      # resolve, so this is intentional (the S3 flow copied it implicitly).
+      # NOTE: the altDeploymentRepository syntax below (id::url) is for
+      # maven-deploy-plugin >= 3.0. If the build ever pins deploy-plugin 2.x,
+      # use rspndr-codeartifact::default::<url> instead.
+      - name: Build and deploy JDBC modules to CodeArtifact
+        run: |
+          MODULES=$(echo "$JDBC_MODULES" | tr -d ' \n')
+          mvn -B --settings "$RUNNER_TEMP/ca-settings.xml" \
+            -DskipTests -Dgpg.skip=true \
+            -DaltDeploymentRepository="rspndr-codeartifact::https://${CA_DOMAIN}-${CA_ACCOUNT}.d.codeartifact.${CA_REGION}.amazonaws.com/maven/${CA_REPO}/" \
+            deploy -pl "$MODULES" -am
+
+      - name: Verify published versions
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          aws codeartifact list-packages \
+            --domain "$CA_DOMAIN" --domain-owner "$CA_ACCOUNT" --region "$CA_REGION" \
+            --repository "$CA_REPO" --query 'packages[].package' --output table
+          aws codeartifact describe-package-version \
+            --domain "$CA_DOMAIN" --domain-owner "$CA_ACCOUNT" --region "$CA_REGION" \
+            --repository "$CA_REPO" --format maven --namespace com.infobip \
+            --package infobip-spring-data-jdbc-querydsl \
+            --package-version "$VERSION" \
+            --query 'packageVersion.{package:packageName,version:version,status:status}'
