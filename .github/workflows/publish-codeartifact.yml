@@ -86,19 +86,22 @@ jobs:
           </settings>
           EOF
 
-      # `deploy -am` also deploys the parent pom and any upstream reactor
-      # modules the listed ones need — consumers require the parent pom to
-      # resolve, so this is intentional (the S3 flow copied it implicitly).
-      # NOTE: the altDeploymentRepository syntax below (id::url) is for
-      # maven-deploy-plugin >= 3.0. If the build ever pins deploy-plugin 2.x,
-      # use rspndr-codeartifact::default::<url> instead.
+      # The upstream pom carries Sonatype's central-publishing-maven-plugin in
+      # extension mode, which hijacks the `deploy` PHASE to publish to Maven
+      # Central (and fails on a missing `central` server id). We therefore
+      # never run the deploy phase: build with `install`, then invoke the
+      # deploy GOAL directly — the direct goal runs per reactor module and the
+      # Central plugin's phase injection never fires. `-am` includes the
+      # parent pom, which consumers need (the S3 flow copied it implicitly).
+      # deploy-plugin is pinned so the id::url alt-repo syntax is guaranteed.
       - name: Build and deploy JDBC modules to CodeArtifact
         run: |
           MODULES=$(echo "$JDBC_MODULES" | tr -d ' \n')
           mvn -B --settings "$RUNNER_TEMP/ca-settings.xml" \
             -DskipTests -Dgpg.skip=true \
             -DaltDeploymentRepository="rspndr-codeartifact::https://${CA_DOMAIN}-${CA_ACCOUNT}.d.codeartifact.${CA_REGION}.amazonaws.com/maven/${CA_REPO}/" \
-            deploy -pl "$MODULES" -am
+            install org.apache.maven.plugins:maven-deploy-plugin:3.1.4:deploy \
+            -pl "$MODULES" -am
 
       - name: Verify published versions
         env:
