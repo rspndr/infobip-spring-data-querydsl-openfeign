@@ -1,4 +1,4 @@
-name: Publish to rspndr-releases in CodeArtifact
+name: Publish to rspndr CodeArtifact
 
 on:
   push:
@@ -99,6 +99,7 @@ jobs:
           MODULES=$(echo "$JDBC_MODULES" | tr -d ' \n')
           mvn -B --settings "$RUNNER_TEMP/ca-settings.xml" \
             -DskipTests -Dgpg.skip=true \
+            -Dmaven.deploy.skip=false \
             -DaltDeploymentRepository="rspndr-codeartifact::https://${CA_DOMAIN}-${CA_ACCOUNT}.d.codeartifact.${CA_REGION}.amazonaws.com/maven/${CA_REPO}/" \
             install org.apache.maven.plugins:maven-deploy-plugin:3.1.4:deploy \
             -pl "$MODULES" -am

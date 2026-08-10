@@ -87,6 +87,8 @@
 		<java.version>17</java.version>
 
 		<kotlin.version>1.9.0</kotlin.version>
+
+		<maven.deploy.skip>true</maven.deploy.skip>
 	</properties>
 
 	<dependencyManagement>
@@ -294,7 +296,7 @@
 				<artifactId>maven-deploy-plugin</artifactId>
 				<version>3.1.2</version>
 				<configuration>
-					<skip>true</skip>
+					<skip>${maven.deploy.skip}</skip>
 				</configuration>
 			</plugin>
 		</plugins>
